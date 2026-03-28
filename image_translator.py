@@ -56,8 +56,10 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
         try:
             base_image = Image.open(img_file)
 
+            # Lưu kích thước gốc trước mọi xử lý — output sẽ được normalize về size này
             orig_size = base_image.size
             w, h = orig_size
+            # Scale up để Gemini nhìn rõ chữ nhỏ (bỏ qua nếu ảnh đã quá lớn)
             if max(w, h) * UPSCALE_FACTOR <= UPSCALE_MAX_DIMENSION:
                 base_image = base_image.resize(
                     (w * UPSCALE_FACTOR, h * UPSCALE_FACTOR),
@@ -99,7 +101,7 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
                     print(f"    [-] Lỗi: Model không trả về ảnh hợp lệ cho {img_file.name}.")
                     continue
 
-                # Scale về kích thước gốc
+                # Normalize output về kích thước gốc — Gemini có thể trả về size khác
                 result_image = result_image.resize(orig_size, Image.LANCZOS)
 
                 if img_file.suffix.lower() in {'.jpg', '.jpeg'} and result_image.mode in ('RGBA', 'P'):

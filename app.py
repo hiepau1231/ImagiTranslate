@@ -56,12 +56,14 @@ def translate_image():
         img_bytes = file.read()
         base_image = Image.open(io.BytesIO(img_bytes))
 
+        # Lưu kích thước gốc trước mọi xử lý — output sẽ được normalize về size này
+        orig_size = base_image.size
+        w, h = orig_size
+
         if base_image.mode in ('RGBA', 'P') and file.filename.lower().endswith(('.jpg', '.jpeg')):
             base_image = base_image.convert('RGB')
 
-        # Scale up để Gemini nhìn rõ chữ nhỏ
-        orig_size = base_image.size
-        w, h = orig_size
+        # Scale up để Gemini nhìn rõ chữ nhỏ (bỏ qua nếu ảnh đã quá lớn)
         if max(w, h) * UPSCALE_FACTOR <= UPSCALE_MAX_DIMENSION:
             base_image = base_image.resize(
                 (w * UPSCALE_FACTOR, h * UPSCALE_FACTOR),
@@ -108,7 +110,7 @@ def translate_image():
         else:
             return jsonify({"error": "Gemini không trả về ảnh hợp lệ."}), 500
 
-        # Scale về kích thước gốc
+        # Normalize output về kích thước gốc — Gemini có thể trả về size khác
         result_pil_img = result_pil_img.resize(orig_size, Image.LANCZOS)
 
         img_byte_arr = io.BytesIO()
