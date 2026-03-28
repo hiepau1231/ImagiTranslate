@@ -13,6 +13,8 @@ GEMINI_MODEL = 'gemini-3.1-flash-image-preview'
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 MAX_FILE_SIZE_MB = 10
+UPSCALE_FACTOR = 2
+UPSCALE_MAX_DIMENSION = 3000
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
 
@@ -57,10 +59,23 @@ def translate_image():
         if base_image.mode in ('RGBA', 'P') and file.filename.lower().endswith(('.jpg', '.jpeg')):
             base_image = base_image.convert('RGB')
 
+        # Scale up để Gemini nhìn rõ chữ nhỏ
+        orig_size = base_image.size
+        w, h = orig_size
+        if max(w, h) * UPSCALE_FACTOR <= UPSCALE_MAX_DIMENSION:
+            base_image = base_image.resize(
+                (w * UPSCALE_FACTOR, h * UPSCALE_FACTOR),
+                Image.LANCZOS
+            )
+
         prompt = (
-            f"Translate all text in this image from {source_lang} to {target_lang}. "
-            "Strictly maintain the exact original layout, typography, colors, and visual style. "
-            "The output should look identical to the original image but with the text translated."
+            f"This image may contain many small icons and UI elements with text. "
+            f"Translate EVERY SINGLE piece of text from {source_lang} to {target_lang}. "
+            "IMPORTANT: Do NOT skip any text, no matter how small, faint, or densely packed. "
+            "This includes small labels under icons, tiny button text, corner labels, and any "
+            "characters no matter how small they appear. "
+            "Strictly preserve the exact original layout, colors, icon graphics, and visual style. "
+            "Only the text characters should change — everything else must remain pixel-perfect."
         )
 
         retry_delay = RETRY_DELAY_SECONDS
@@ -92,6 +107,9 @@ def translate_image():
             result_pil_img = Image.open(io.BytesIO(part.inline_data.data))
         else:
             return jsonify({"error": "Gemini không trả về ảnh hợp lệ."}), 500
+
+        # Scale về kích thước gốc
+        result_pil_img = result_pil_img.resize(orig_size, Image.LANCZOS)
 
         img_byte_arr = io.BytesIO()
         result_pil_img.save(img_byte_arr, format='JPEG')

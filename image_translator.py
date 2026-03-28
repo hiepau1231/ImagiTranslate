@@ -10,6 +10,8 @@ GEMINI_MODEL = 'gemini-3.1-flash-image-preview'
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 2
 VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
+UPSCALE_FACTOR = 2
+UPSCALE_MAX_DIMENSION = 3000
 
 def translate_images(input_dir: str, output_dir: str, source_lang: str, target_lang: str):
     """Dịch văn bản trong ảnh từ ngôn ngữ nguồn sang ngôn ngữ đích dùng Gemini."""
@@ -39,9 +41,13 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
     print(f"Bắt đầu dịch hàng loạt (từ '{source_lang}' sang '{target_lang}')...\n")
 
     prompt = (
-        f"Translate all text in this image from {source_lang} to {target_lang}. "
-        "Strictly maintain the exact original layout, typography, colors, and visual style. "
-        "The output should look identical to the original image but with the text translated."
+        f"This image may contain many small icons and UI elements with text. "
+        f"Translate EVERY SINGLE piece of text from {source_lang} to {target_lang}. "
+        "IMPORTANT: Do NOT skip any text, no matter how small, faint, or densely packed. "
+        "This includes small labels under icons, tiny button text, corner labels, and any "
+        "characters no matter how small they appear. "
+        "Strictly preserve the exact original layout, colors, icon graphics, and visual style. "
+        "Only the text characters should change — everything else must remain pixel-perfect."
     )
 
     for img_file in images_found:
@@ -49,6 +55,14 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
 
         try:
             base_image = Image.open(img_file)
+
+            orig_size = base_image.size
+            w, h = orig_size
+            if max(w, h) * UPSCALE_FACTOR <= UPSCALE_MAX_DIMENSION:
+                base_image = base_image.resize(
+                    (w * UPSCALE_FACTOR, h * UPSCALE_FACTOR),
+                    Image.LANCZOS
+                )
 
             retry_delay = RETRY_DELAY_SECONDS
             response = None
@@ -84,6 +98,9 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
                 else:
                     print(f"    [-] Lỗi: Model không trả về ảnh hợp lệ cho {img_file.name}.")
                     continue
+
+                # Scale về kích thước gốc
+                result_image = result_image.resize(orig_size, Image.LANCZOS)
 
                 if img_file.suffix.lower() in {'.jpg', '.jpeg'} and result_image.mode in ('RGBA', 'P'):
                     result_image = result_image.convert('RGB')
