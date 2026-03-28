@@ -1,0 +1,12 @@
+.venv
+__pycache__/
+*.pyc
+.env
+input/
+output/
+.DS_Store
+
+# Docs và markdown nội bộ
+docs/
+*.md
+!README.md
