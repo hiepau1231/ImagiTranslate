@@ -75,10 +75,19 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
                         model=GEMINI_MODEL,
                         contents=[base_image, prompt]
                     )
-                    if response and response.candidates and response.candidates[0].content.parts:
+                    # Chỉ break khi có ít nhất 1 part là ảnh (inline_data hoặc image)
+                    parts = response.candidates[0].content.parts if (
+                        response and response.candidates
+                    ) else []
+                    has_image = any(
+                        (hasattr(p, 'image') and p.image) or
+                        (hasattr(p, 'inline_data') and p.inline_data)
+                        for p in parts
+                    )
+                    if has_image:
                         break
                     else:
-                        raise Exception("Phản hồi trống hoặc không hợp lệ")
+                        raise Exception("Phản hồi không chứa ảnh (có thể là text response)")
                 except Exception as e:
                     print(f"    [!] Lần thử {attempt + 1}/{MAX_RETRIES} thất bại cho {img_file.name}: {e}")
                     if attempt < MAX_RETRIES - 1:
