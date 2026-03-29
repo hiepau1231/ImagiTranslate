@@ -51,6 +51,8 @@ def detect_cjk_bboxes(pil_image):
         Trả về [] nếu không còn chữ Chinese hoặc nếu OCR lỗi.
     """
     img_w, img_h = pil_image.size
+    if img_w == 0 or img_h == 0:
+        return []
     # PaddleOCR yêu cầu numpy array RGB
     img_array = np.array(pil_image.convert('RGB'))
 
@@ -66,7 +68,10 @@ def detect_cjk_bboxes(pil_image):
 
     bboxes = []
     for line in result[0]:
-        polygon, (text, confidence) = line
+        try:
+            polygon, (text, confidence) = line
+        except (ValueError, TypeError):
+            continue
 
         # Lọc bỏ bbox có confidence thấp (tránh false positive từ texture/background)
         if confidence < CJK_CONFIDENCE_THRESHOLD:
