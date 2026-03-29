@@ -1,11 +1,10 @@
 import os
 import io
-import time
 import base64
 from flask import Flask, render_template, request, jsonify
 from PIL import Image
 from google import genai
-from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid
 
 app = Flask(__name__)
 
