@@ -38,6 +38,12 @@ def translate_image():
 
     source_lang = request.form.get('source_lang', 'auto-detect')
     target_lang = request.form.get('target_lang')
+    grid_size = request.form.get('grid_size', 'off')
+    try:
+        grid_n = int(grid_size.split('x')[0]) if grid_size != 'off' else 1
+    except (ValueError, IndexError):
+        grid_n = 1
+        print(f"Cảnh báo: Giá trị grid_size không hợp lệ '{grid_size}', dùng mặc định: off")
 
     if not target_lang:
         return jsonify({"error": "Ngôn ngữ đích là bắt buộc."}), 400
