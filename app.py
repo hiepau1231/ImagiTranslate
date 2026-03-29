@@ -5,13 +5,11 @@ import base64
 from flask import Flask, render_template, request, jsonify
 from PIL import Image
 from google import genai
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS
 
 app = Flask(__name__)
 
 # --- Constants ---
-GEMINI_MODEL = 'gemini-3.1-flash-image-preview'
-MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 2
 MAX_FILE_SIZE_MB = 10
 UPSCALE_FACTOR = 2
 UPSCALE_MAX_DIMENSION = 3000
