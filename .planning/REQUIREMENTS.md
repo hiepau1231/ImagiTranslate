@@ -55,18 +55,20 @@
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| GRID-01 | Phase 1 | Pending |
-| GRID-02 | Phase 1 | Pending |
-| GRID-03 | Phase 1 | Pending |
-| GRID-04 | Phase 1 | Pending |
-| GRID-05 | Phase 1 | Pending |
-| GRID-06 | Phase 1 | Pending |
-| GRID-07 | Phase 1 | Pending |
-| CLI-01 | Phase 2 | Pending |
-| WEB-01 | Phase 2 | Pending |
-| WEB-02 | Phase 2 | Pending |
+See: .planning/ROADMAP.md for phase goals and success criteria.
+
+| Requirement | Phase | Phase Name | Status |
+|-------------|-------|------------|--------|
+| GRID-01 | Phase 1 | Grid Module Core | Pending |
+| GRID-02 | Phase 1 | Grid Module Core | Pending |
+| GRID-03 | Phase 1 | Grid Module Core | Pending |
+| GRID-04 | Phase 1 | Grid Module Core | Pending |
+| GRID-05 | Phase 1 | Grid Module Core | Pending |
+| GRID-06 | Phase 1 | Grid Module Core | Pending |
+| GRID-07 | Phase 1 | Grid Module Core | Pending |
+| CLI-01  | Phase 2 | Entry Point Integration | Pending |
+| WEB-01  | Phase 2 | Entry Point Integration | Pending |
+| WEB-02  | Phase 2 | Entry Point Integration | Pending |
 
 **Coverage:**
 - v1 requirements: 10 total
@@ -75,4 +77,4 @@
 
 ---
 *Requirements defined: 2026-03-29*
-*Last updated: 2026-03-29 after initial definition*
+*Last updated: 2026-03-29 — added roadmap traceability (phase names)*
