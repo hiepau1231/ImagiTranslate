@@ -4,7 +4,7 @@ import base64
 from flask import Flask, render_template, request, jsonify
 from PIL import Image
 from google import genai
-from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid, verify_and_patch, VERIFY_MAX_PASSES
 
 app = Flask(__name__)
 
@@ -45,6 +45,12 @@ def translate_image():
         grid_n = 1
         print(f"Cảnh báo: Giá trị grid_size không hợp lệ '{grid_size}', dùng mặc định: off")
 
+    try:
+        verify_passes = int(request.form.get('verify_passes', 0))
+        verify_passes = max(0, min(verify_passes, VERIFY_MAX_PASSES))
+    except (ValueError, TypeError):
+        verify_passes = 0
+
     if not target_lang:
         return jsonify({"error": "Ngôn ngữ đích là bắt buộc."}), 400
 
@@ -84,6 +90,9 @@ def translate_image():
         )
 
         result_pil_img = translate_with_grid(base_image, client, prompt, grid_n)
+
+        if verify_passes > 0:
+            result_pil_img = verify_and_patch(result_pil_img, client, target_lang, max_passes=verify_passes)
 
         # Normalize output về kích thước gốc — Gemini có thể trả về size khác
         result_pil_img = result_pil_img.resize(orig_size, Image.LANCZOS)
