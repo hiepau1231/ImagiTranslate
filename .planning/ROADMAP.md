@@ -19,7 +19,7 @@
 | Plan | Description | Status |
 |------|-------------|--------|
 | 01-01 | Create `grid_translator.py` module | ✅ Done (2026-03-29) |
-| 01-02 | Constants migration (app.py + image_translator.py) | ⬜ Pending |
+| 01-02 | Constants migration (app.py + image_translator.py) | ✅ Done (2026-03-29) |
 
 ### Success Criteria
 
