@@ -15,7 +15,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetLangSel = document.getElementById('target-lang');
     const apiKeyInput = document.getElementById('api-key');
     const gridSizeSel = document.getElementById('grid-size');
-    
+    const verifyToggle = document.getElementById('verify-toggle');
+
     const resultContainer = document.getElementById('result-container');
     
     const toast = document.getElementById('error-message');
@@ -169,6 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('target_lang', targetLangSel.value);
             formData.append('api_key', apiKeyInput.value.trim());
             formData.append('grid_size', gridSizeSel.value);
+            formData.append('verify_passes', verifyToggle.checked ? '3' : '0');
 
             batchProgress.textContent = `(Đang dịch ${i+1}/${currentFiles.length}...)`;
 
