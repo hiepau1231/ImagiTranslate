@@ -55,13 +55,22 @@ def _parse_bboxes(response_text):
             - had_invalid: True if >= 1 bbox was filtered due to invalid coordinates
     """
     text = response_text.strip()
-    match = re.search(r'\[.*\]', text, re.DOTALL)
-    if not match:
+    # Try each [...] match from last to first — Gemini's actual answer is typically last
+    matches = list(re.finditer(r'\[.*?\]', text, re.DOTALL))
+    if not matches:
+        return [], False, False
+    raw = None
+    for m in reversed(matches):
+        try:
+            candidate = json.loads(m.group())
+            if isinstance(candidate, list):
+                raw = candidate
+                break
+        except json.JSONDecodeError:
+            continue
+    if raw is None:
         return [], False, False
     try:
-        raw = json.loads(match.group())
-        if not isinstance(raw, list):
-            return [], False, False
         valid = []
         had_invalid = False
         for b in raw:
