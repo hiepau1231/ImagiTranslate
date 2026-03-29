@@ -83,44 +83,7 @@ def translate_image():
             "Only the text characters should change — everything else must remain pixel-perfect."
         )
 
-        retry_delay = RETRY_DELAY_SECONDS
-        response = None
-
-        for attempt in range(MAX_RETRIES):
-            try:
-                response = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=[base_image, prompt]
-                )
-                # Chỉ break khi có ít nhất 1 part là ảnh (inline_data hoặc image)
-                parts = response.candidates[0].content.parts if (
-                    response and response.candidates
-                ) else []
-                has_image = any(
-                    (hasattr(p, 'image') and p.image) or
-                    (hasattr(p, 'inline_data') and p.inline_data)
-                    for p in parts
-                )
-                if has_image:
-                    break
-                else:
-                    raise Exception("Phản hồi không chứa ảnh (có thể là text response)")
-            except Exception as e:
-                print(f"Lần thử {attempt + 1}/{MAX_RETRIES} thất bại: {e}")
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                else:
-                    return jsonify({"error": f"Gemini xử lý thất bại sau {MAX_RETRIES} lần thử. Lỗi: {e}"}), 500
-
-        part = response.candidates[0].content.parts[0]
-
-        if hasattr(part, 'image') and part.image:
-            result_pil_img = part.image
-        elif hasattr(part, 'inline_data') and part.inline_data:
-            result_pil_img = Image.open(io.BytesIO(part.inline_data.data))
-        else:
-            return jsonify({"error": "Gemini không trả về ảnh hợp lệ."}), 500
+        result_pil_img = translate_with_grid(base_image, client, prompt, grid_n)
 
         # Normalize output về kích thước gốc — Gemini có thể trả về size khác
         result_pil_img = result_pil_img.resize(orig_size, Image.LANCZOS)
