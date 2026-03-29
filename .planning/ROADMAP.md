@@ -18,8 +18,8 @@
 
 | Plan | Description | Status |
 |------|-------------|--------|
-| 01-01 | Create `grid_translator.py` module | ✅ Done (2026-03-29) |
-| 01-02 | Constants migration (app.py + image_translator.py) | ✅ Done (2026-03-29) |
+| 01-01 | Create `grid_translator.py` module | Done (2026-03-29) |
+| 01-02 | Constants migration (app.py + image_translator.py) | Done (2026-03-29) |
 
 ### Success Criteria
 
@@ -36,6 +36,13 @@
 **Goal:** Kết nối `translate_with_grid()` vào cả hai entry point — CLI nhận flag `--grid NxN`, web nhận dropdown "Grid size" và truyền `grid_n` vào backend — để user có thể chủ động bật grid mode.
 **Requirements:** CLI-01, WEB-01, WEB-02
 **UI hint:** yes (web dropdown)
+
+### Plans
+
+| Plan | Description | Status |
+|------|-------------|--------|
+| 02-01 | CLI Integration — image_translator.py | ✅ Done (2026-03-29) |
+| 02-02 | Web Integration — app.py + frontend | ✅ Done (2026-03-29) |
 
 ### Success Criteria
 
