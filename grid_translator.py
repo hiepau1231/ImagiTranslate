@@ -55,31 +55,37 @@ def _parse_bboxes(response_text):
             - had_invalid: True if >= 1 bbox was filtered due to invalid coordinates
     """
     text = response_text.strip()
-    # Find all [...] groups, then pick the best candidate:
-    # prefer list-of-dicts (actual bboxes) over list-of-primitives (e.g. [0,1] notes)
+    # Find all [...] groups; pick the best candidate by priority:
+    # non-empty dict-list (2) > empty list (1) > primitive list (0)
+    # Ties broken by length (longer wins)
     matches = list(re.finditer(r'\[.*?\]', text, re.DOTALL))
     if not matches:
         return [], False, False
+
+    def _candidate_priority(lst):
+        if not lst:
+            return 1  # empty list: medium — "clean answer"
+        if all(isinstance(x, dict) for x in lst):
+            return 2  # non-empty dict-list: highest — actual bboxes
+        return 0  # primitive list: lowest — Gemini annotation noise
+
     raw = None
+    raw_priority = -1
     for m in matches:
         try:
             candidate = json.loads(m.group())
             if not isinstance(candidate, list):
                 continue
-            is_dict_list = bool(candidate) and all(isinstance(x, dict) for x in candidate)
-            # Prefer dict-list candidates; among equals prefer longer
-            if raw is None:
+            p = _candidate_priority(candidate)
+            if p > raw_priority or (p == raw_priority and len(candidate) > len(raw)):
                 raw = candidate
-            elif is_dict_list and not (bool(raw) and all(isinstance(x, dict) for x in raw)):
-                raw = candidate
-            elif len(candidate) > len(raw) and (
-                not (bool(raw) and all(isinstance(x, dict) for x in raw)) or is_dict_list
-            ):
-                raw = candidate
+                raw_priority = p
         except json.JSONDecodeError:
             continue
+
     if raw is None:
         return [], False, False
+
     try:
         valid = []
         had_invalid = False
