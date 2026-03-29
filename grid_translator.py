@@ -46,20 +46,7 @@ def _translate_single_tile(tile, client, prompt):
                     response_modalities=['IMAGE', 'TEXT']
                 )
             )
-            # --- DIAGNOSTIC LOGGING ---
-            print(f"[DIAG] attempt={attempt} response type={type(response)}")
-            print(f"[DIAG] has candidates={bool(response and response.candidates)}")
-            if response and response.candidates:
-                cand = response.candidates[0]
-                print(f"[DIAG] finish_reason={getattr(cand, 'finish_reason', 'N/A')}")
-                raw_parts = cand.content.parts if cand.content else None
-                print(f"[DIAG] num_parts={len(raw_parts) if raw_parts is not None else 'content=None'}")
-                for i, p in enumerate(raw_parts):
-                    has_img = hasattr(p, 'image') and p.image
-                    has_inline = hasattr(p, 'inline_data') and p.inline_data
-                    has_text = hasattr(p, 'text') and p.text
-                    print(f"[DIAG]   part[{i}]: image={has_img} inline_data={has_inline} text={bool(has_text)} text_snippet={repr(p.text[:80]) if has_text else 'N/A'}")
-            # --- END DIAGNOSTIC LOGGING ---
+
             parts = response.candidates[0].content.parts if (
                 response and response.candidates
                 and response.candidates[0].content
@@ -74,7 +61,6 @@ def _translate_single_tile(tile, client, prompt):
             else:
                 raise Exception("Phan hoi khong chua anh")
         except Exception as e:
-            print(f"[DIAG] attempt={attempt} exception: {type(e).__name__}: {e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(retry_delay)
                 retry_delay *= 2
