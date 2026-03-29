@@ -1,11 +1,9 @@
 import io
-import json
-import math
-import re
 import time
 import numpy as np
 from PIL import Image
 from google.genai import types
+from ocr_detector import detect_cjk_bboxes
 
 # Tile có ít hơn ngưỡng này pixel có nội dung thì bỏ qua, không gọi API
 EMPTY_TILE_THRESHOLD = 0.02
@@ -21,18 +19,6 @@ VERIFY_CROP_MARGIN = 0.08
 VERIFY_MAX_BBOX_AREA = 0.80
 VERIFY_MIN_CROP_PX = 20
 
-VERIFY_PROMPT = (
-    "Examine this image carefully. "
-    "Find ALL remaining Chinese characters (Hanzi/CJK Unified Ideographs, "
-    "including Simplified and Traditional Chinese). "
-    "Return ONLY a valid JSON array of bounding boxes: "
-    '[{"x1": 0.1, "y1": 0.2, "x2": 0.3, "y2": 0.4}] '
-    "Coordinates are normalized 0.0-1.0 relative to image dimensions "
-    "(x1,y1 = top-left corner, x2,y2 = bottom-right corner). "
-    "If no Chinese text remains, return exactly: [] "
-    "Return ONLY the JSON array, nothing else."
-)
-
 
 def _is_empty_tile(tile):
     """Trả về True nếu tile gần như trống (< EMPTY_TILE_THRESHOLD pixel có nội dung)."""
@@ -45,72 +31,6 @@ def _is_empty_tile(tile):
     return (non_empty / total) < EMPTY_TILE_THRESHOLD
 
 
-def _parse_bboxes(response_text):
-    """Parse JSON bounding boxes from Gemini verify response.
-
-    Returns:
-        tuple (bboxes, parse_ok, had_invalid):
-            - bboxes: list of valid dict {x1, y1, x2, y2} (normalized 0.0-1.0)
-            - parse_ok: True if response is a valid JSON list (including empty)
-            - had_invalid: True if >= 1 bbox was filtered due to invalid coordinates
-    """
-    text = response_text.strip()
-    # Find all [...] groups; pick the best candidate by priority:
-    # non-empty dict-list (2) > empty list (1) > primitive list (0)
-    # Ties broken by length (longer wins)
-    matches = list(re.finditer(r'\[.*?\]', text, re.DOTALL))
-    if not matches:
-        return [], False, False
-
-    def _candidate_priority(lst):
-        if not lst:
-            return 1  # empty list: medium — "clean answer"
-        if all(isinstance(x, dict) for x in lst):
-            return 2  # non-empty dict-list: highest — actual bboxes
-        return 0  # primitive list: lowest — Gemini annotation noise
-
-    raw = None
-    raw_priority = -1
-    for m in matches:
-        try:
-            candidate = json.loads(m.group())
-            if not isinstance(candidate, list):
-                continue
-            p = _candidate_priority(candidate)
-            if p > raw_priority or (p == raw_priority and len(candidate) > len(raw)):
-                raw = candidate
-                raw_priority = p
-        except json.JSONDecodeError:
-            continue
-
-    if raw is None:
-        return [], False, False
-
-    try:
-        valid = []
-        had_invalid = False
-        for b in raw:
-            if not all(k in b for k in ('x1', 'y1', 'x2', 'y2')):
-                had_invalid = True
-                continue
-            try:
-                x1, y1 = float(b['x1']), float(b['y1'])
-                x2, y2 = float(b['x2']), float(b['y2'])
-            except (ValueError, TypeError):  # handles non-numeric values including null/None
-                had_invalid = True
-                continue
-            if not all(math.isfinite(v) for v in (x1, y1, x2, y2)):
-                had_invalid = True
-                continue
-            if not (0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0):
-                had_invalid = True
-                continue
-            valid.append({'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2})
-        return valid, True, had_invalid
-    except (json.JSONDecodeError, ValueError, TypeError):
-        return [], False, False
-
-
 def _translate_single_tile(tile, client, prompt):
     """Dich mot tile qua Gemini voi retry va dual-format parse."""
     tile_size = tile.size
@@ -118,15 +38,31 @@ def _translate_single_tile(tile, client, prompt):
 
     for attempt in range(MAX_RETRIES):
         try:
+            image_prompt = prompt + " Output the result as an image."
             response = client.models.generate_content(
                 model=GEMINI_MODEL,
-                contents=[tile, prompt],
+                contents=[image_prompt, tile],
                 config=types.GenerateContentConfig(
                     response_modalities=['IMAGE', 'TEXT']
                 )
             )
+            # --- DIAGNOSTIC LOGGING ---
+            print(f"[DIAG] attempt={attempt} response type={type(response)}")
+            print(f"[DIAG] has candidates={bool(response and response.candidates)}")
+            if response and response.candidates:
+                cand = response.candidates[0]
+                print(f"[DIAG] finish_reason={getattr(cand, 'finish_reason', 'N/A')}")
+                raw_parts = cand.content.parts if cand.content else None
+                print(f"[DIAG] num_parts={len(raw_parts) if raw_parts is not None else 'content=None'}")
+                for i, p in enumerate(raw_parts):
+                    has_img = hasattr(p, 'image') and p.image
+                    has_inline = hasattr(p, 'inline_data') and p.inline_data
+                    has_text = hasattr(p, 'text') and p.text
+                    print(f"[DIAG]   part[{i}]: image={has_img} inline_data={has_inline} text={bool(has_text)} text_snippet={repr(p.text[:80]) if has_text else 'N/A'}")
+            # --- END DIAGNOSTIC LOGGING ---
             parts = response.candidates[0].content.parts if (
                 response and response.candidates
+                and response.candidates[0].content
             ) else []
             has_image = any(
                 (hasattr(p, 'image') and p.image) or
@@ -138,6 +74,7 @@ def _translate_single_tile(tile, client, prompt):
             else:
                 raise Exception("Phan hoi khong chua anh")
         except Exception as e:
+            print(f"[DIAG] attempt={attempt} exception: {type(e).__name__}: {e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(retry_delay)
                 retry_delay *= 2
@@ -242,42 +179,16 @@ def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
     img_area = img_w * img_h
 
     for pass_num in range(max_passes):
-        # Send image to Gemini to detect remaining CJK text
+        # Detect remaining Chinese ideographs using PaddleOCR (local, no Gemini call)
         try:
-            verify_response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=[image, VERIFY_PROMPT],
-                config=types.GenerateContentConfig(
-                    response_modalities=['TEXT']
-                )
-            )
-            response_text = ''
-            if verify_response and verify_response.candidates:
-                for part in verify_response.candidates[0].content.parts:
-                    if hasattr(part, 'text') and part.text:
-                        response_text += part.text
+            bboxes = detect_cjk_bboxes(image)
         except Exception as e:
-            print(f"[verify_and_patch] Pass {pass_num + 1}: Lỗi gọi verify API: {e}")
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Loi OCR detect: {e}. Dung verify.")
             break
-
-        bboxes, parse_ok, had_invalid = _parse_bboxes(response_text)
-
-        if not parse_ok:
-            # Gemini returned non-JSON: log warning, skip this pass
-            print(f"[verify_and_patch] Pass {pass_num + 1}: Cảnh báo — Gemini trả về non-JSON. Bỏ qua lượt này.")
-            continue
-
-        if not bboxes and had_invalid:
-            # Gemini detected text but all coordinates were invalid: log, skip
-            print(f"[verify_and_patch] Pass {pass_num + 1}: Cảnh báo — Gemini trả về bbox không hợp lệ. Bỏ qua lượt này.")
-            continue
-
-        if not bboxes and not had_invalid:
-            # Gemini confirmed no CJK remaining: early exit
-            print(f"[verify_and_patch] Pass {pass_num + 1}: Không còn chữ CJK. Dừng sớm.")
+        if not bboxes:
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Khong con chu Chinese. Dung som.")
             break
-
-        print(f"[verify_and_patch] Pass {pass_num + 1}: Phát hiện {len(bboxes)} vùng cần patch.")
+        print(f"[verify_and_patch] Pass {pass_num + 1}: Phat hien {len(bboxes)} vung can patch.")
 
         # Patch each bbox
         patched_any = False
