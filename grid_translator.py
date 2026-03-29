@@ -215,3 +215,126 @@ def translate_with_grid(image, client, prompt, grid_n=1):
         translated.append((left, upper, right, lower, result))
 
     return _stitch_tiles(translated, image.size, grid_n)
+
+
+def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
+    """Kiểm tra ảnh đã dịch còn sót chữ CJK không, patch các vùng bị bỏ sót.
+
+    Args:
+        image: PIL.Image - ảnh đã dịch xong
+        client: genai.Client
+        target_lang: str - ngôn ngữ đích để dịch lại
+        max_passes: int - số vòng kiểm tra tối đa (default VERIFY_MAX_PASSES=3)
+
+    Returns:
+        PIL.Image - ảnh đã patch (có thể là object cũ nếu không có gì cần fix)
+    """
+    # Clamp to ensure we never exceed the configured limit
+    max_passes = min(max(0, max_passes), VERIFY_MAX_PASSES)
+    if max_passes == 0:
+        return image
+
+    patch_prompt = (
+        f"Translate EVERY SINGLE piece of text from Chinese to {target_lang}. "
+        "Do NOT skip any text. Preserve layout, colors, and visual style exactly."
+    )
+    img_w, img_h = image.size
+    img_area = img_w * img_h
+
+    for pass_num in range(max_passes):
+        # Send image to Gemini to detect remaining CJK text
+        try:
+            verify_response = client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=[image, VERIFY_PROMPT],
+                config=types.GenerateContentConfig(
+                    response_modalities=['TEXT']
+                )
+            )
+            response_text = ''
+            if verify_response and verify_response.candidates:
+                for part in verify_response.candidates[0].content.parts:
+                    if hasattr(part, 'text') and part.text:
+                        response_text += part.text
+        except Exception as e:
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Lỗi gọi verify API: {e}")
+            break
+
+        bboxes, parse_ok, had_invalid = _parse_bboxes(response_text)
+
+        if not parse_ok:
+            # Gemini returned non-JSON: log warning, skip this pass
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Cảnh báo — Gemini trả về non-JSON. Bỏ qua lượt này.")
+            continue
+
+        if not bboxes and had_invalid:
+            # Gemini detected text but all coordinates were invalid: log, skip
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Cảnh báo — Gemini trả về bbox không hợp lệ. Bỏ qua lượt này.")
+            continue
+
+        if not bboxes and not had_invalid:
+            # Gemini confirmed no CJK remaining: early exit
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Không còn chữ CJK. Dừng sớm.")
+            break
+
+        print(f"[verify_and_patch] Pass {pass_num + 1}: Phát hiện {len(bboxes)} vùng cần patch.")
+
+        # Patch each bbox
+        patched_any = False
+        for bbox in bboxes:
+            try:
+                x1 = bbox['x1']
+                y1 = bbox['y1']
+                x2 = bbox['x2']
+                y2 = bbox['y2']
+
+                # Expand by 8% margin
+                margin_x = (x2 - x1) * VERIFY_CROP_MARGIN
+                margin_y = (y2 - y1) * VERIFY_CROP_MARGIN
+                x1 = max(0.0, x1 - margin_x)
+                y1 = max(0.0, y1 - margin_y)
+                x2 = min(1.0, x2 + margin_x)
+                y2 = min(1.0, y2 + margin_y)
+
+                # Convert to pixels
+                px1 = int(x1 * img_w)
+                py1 = int(y1 * img_h)
+                px2 = int(x2 * img_w)
+                py2 = int(y2 * img_h)
+
+                crop_w = px2 - px1
+                crop_h = py2 - py1
+                crop_area = crop_w * crop_h
+
+                # Skip if crop is too small
+                if crop_w < VERIFY_MIN_CROP_PX or crop_h < VERIFY_MIN_CROP_PX:
+                    print(f"[verify_and_patch] Skip small bbox: {crop_w}x{crop_h}px")
+                    continue
+
+                # Skip if bbox covers > 80% of image (prevent infinite re-translate)
+                if crop_area > img_area * VERIFY_MAX_BBOX_AREA:
+                    print(f"[verify_and_patch] Skip large bbox: {crop_area/img_area:.1%}")
+                    continue
+
+                # Crop and upscale 2x so Gemini can read small text
+                crop = image.crop((px1, py1, px2, py2))
+                upscaled_crop = crop.resize((crop_w * 2, crop_h * 2), Image.LANCZOS)
+
+                # Re-translate the cropped region
+                translated_crop = _translate_single_tile(upscaled_crop, client, patch_prompt)
+
+                # Resize back to original crop size and paste over
+                translated_crop = translated_crop.resize((crop_w, crop_h), Image.LANCZOS)
+                translated_crop = translated_crop.convert(image.mode)
+                image.paste(translated_crop, (px1, py1))
+                patched_any = True
+
+            except Exception as e:
+                print(f"[verify_and_patch] Lỗi patch bbox {bbox}: {e}. Bỏ qua, tiếp tục.")
+                continue
+
+        if not patched_any:
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Không patch được vùng nào. Dừng.")
+            break
+
+    return image
