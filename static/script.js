@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sourceLangSel = document.getElementById('source-lang');
     const targetLangSel = document.getElementById('target-lang');
     const apiKeyInput = document.getElementById('api-key');
+    const gridSizeSel = document.getElementById('grid-size');
     
     const resultContainer = document.getElementById('result-container');
     
@@ -167,6 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('source_lang', sourceLangSel.value);
             formData.append('target_lang', targetLangSel.value);
             formData.append('api_key', apiKeyInput.value.trim());
+            formData.append('grid_size', gridSizeSel.value);
 
             batchProgress.textContent = `(Đang dịch ${i+1}/${currentFiles.length}...)`;
 
