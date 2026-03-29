@@ -5,13 +5,13 @@ import argparse
 from pathlib import Path
 from PIL import Image
 from google import genai
-from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid, verify_and_patch
 
 VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 UPSCALE_FACTOR = 2
 UPSCALE_MAX_DIMENSION = 3000
 
-def translate_images(input_dir: str, output_dir: str, source_lang: str, target_lang: str, grid_n: int = 1):
+def translate_images(input_dir: str, output_dir: str, source_lang: str, target_lang: str, grid_n: int = 1, verify_passes: int = 0):
     """Dịch văn bản trong ảnh từ ngôn ngữ nguồn sang ngôn ngữ đích dùng Gemini."""
     if not os.environ.get("GEMINI_API_KEY"):
         print("Lỗi: Biến môi trường GEMINI_API_KEY chưa được thiết lập.")
@@ -67,6 +67,9 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
             out_file_path = output_path / img_file.name
             result_image = translate_with_grid(base_image, client, prompt, grid_n)
 
+            if verify_passes > 0:
+                result_image = verify_and_patch(result_image, client, target_lang, max_passes=verify_passes)
+
             # Normalize output về kích thước gốc — Gemini có thể trả về size khác
             result_image = result_image.resize(orig_size, Image.LANCZOS)
 
@@ -94,6 +97,13 @@ if __name__ == "__main__":
         default=None,
         help="Kích thước lưới chia ảnh, ví dụ: --grid 2x2, --grid 3x3. Mặc định: không chia (xử lý toàn bộ ảnh). Hợp lệ: 1x1-4x4."
     )
+    parser.add_argument(
+        "--verify-passes",
+        type=int,
+        default=0,
+        dest="verify_passes",
+        help="Số vòng kiểm tra và vá chữ CJK còn sót (mặc định: 0 = tắt). Ví dụ: --verify-passes 3"
+    )
 
     args = parser.parse_args()
 
@@ -106,4 +116,4 @@ if __name__ == "__main__":
             sys.exit(1)
         grid_n = int(match.group(1))
 
-    translate_images(args.input, args.output, args.source_lang, args.target_lang, grid_n)
+    translate_images(args.input, args.output, args.source_lang, args.target_lang, grid_n, args.verify_passes)
