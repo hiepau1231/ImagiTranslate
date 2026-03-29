@@ -51,49 +51,69 @@ VERIFY_PROMPT = (
 )
 ```
 
-- [ ] **Bước 2: Thêm `import json` và `import re` vào đầu file**
+- [ ] **Bước 2: Thêm `import json`, `import re`, `import math` vào đầu file**
 
 Sau `import io` (dòng 1), thêm:
 
 ```python
 import io
 import json
+import math
 import re
 ```
 
-File hiện tại đã có `import io`, chỉ cần thêm `import json` và `import re` vào ngay sau.
+File hiện tại đã có `import io`, chỉ cần thêm 3 imports còn lại vào ngay sau.
 
 - [ ] **Bước 3: Thêm hàm `_parse_bboxes()` vào `grid_translator.py`, sau hàm `_is_empty_tile()`**
 
+> ⚠️ **[Fix ISSUE-1, ISSUE-4]:** Hàm trả về tuple `(bboxes, parse_ok, had_invalid)` — phân biệt 3 trạng thái: parse failure / truly empty / có invalid bboxes bị lọc.
+
 ```python
+import math
+
 def _parse_bboxes(response_text):
     """Parse JSON bounding boxes từ Gemini verify response.
 
-    Trả về list of dict {x1, y1, x2, y2} (normalized 0.0-1.0).
-    Trả về [] nếu parse thất bại hoặc không có bbox nào.
+    Returns:
+        tuple (bboxes, parse_ok, had_invalid):
+            - bboxes: list of valid dict {x1, y1, x2, y2} (normalized 0.0-1.0)
+            - parse_ok: True nếu response là JSON list hợp lệ (kể cả empty)
+            - had_invalid: True nếu có >= 1 bbox bị lọc do tọa độ invalid
     """
     text = response_text.strip()
-    # Thử extract [...] từ response dù có text thừa
     match = re.search(r'\[.*\]', text, re.DOTALL)
     if not match:
-        return []
+        return [], False, False
     try:
-        bboxes = json.loads(match.group())
-        if not isinstance(bboxes, list):
-            return []
+        raw = json.loads(match.group())
+        if not isinstance(raw, list):
+            return [], False, False
         valid = []
-        for b in bboxes:
-            if all(k in b for k in ('x1', 'y1', 'x2', 'y2')):
-                valid.append({
-                    'x1': float(b['x1']),
-                    'y1': float(b['y1']),
-                    'x2': float(b['x2']),
-                    'y2': float(b['y2']),
-                })
-        return valid
+        had_invalid = False
+        for b in raw:
+            if not all(k in b for k in ('x1', 'y1', 'x2', 'y2')):
+                had_invalid = True
+                continue
+            try:
+                x1, y1 = float(b['x1']), float(b['y1'])
+                x2, y2 = float(b['x2']), float(b['y2'])
+            except (ValueError, TypeError):
+                had_invalid = True
+                continue
+            # Validate finite values và normalized range với coordinate ordering
+            if not all(math.isfinite(v) for v in (x1, y1, x2, y2)):
+                had_invalid = True
+                continue
+            if not (0.0 <= x1 < x2 <= 1.0 and 0.0 <= y1 < y2 <= 1.0):
+                had_invalid = True
+                continue
+            valid.append({'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2})
+        return valid, True, had_invalid
     except (json.JSONDecodeError, ValueError, TypeError):
-        return []
+        return [], False, False
 ```
+
+**Lưu ý:** Cần thêm `import math` vào đầu file cùng với `import json` và `import re`.
 
 - [ ] **Bước 4: Smoke test `_parse_bboxes()` thủ công**
 
@@ -104,21 +124,30 @@ cd d:\_Dev\GoodFirstIsuuses\ImagiTranslate
 python -c "
 from grid_translator import _parse_bboxes
 
-# Test 1: valid JSON
-result = _parse_bboxes('[{\"x1\": 0.1, \"y1\": 0.2, \"x2\": 0.3, \"y2\": 0.4}]')
-assert result == [{'x1': 0.1, 'y1': 0.2, 'x2': 0.3, 'y2': 0.4}], f'FAIL: {result}'
+# Test 1: valid JSON — parse_ok=True, 1 bbox, had_invalid=False
+bboxes, ok, invalid = _parse_bboxes('[{\"x1\": 0.1, \"y1\": 0.2, \"x2\": 0.3, \"y2\": 0.4}]')
+assert ok is True and invalid is False, f'FAIL: {ok}, {invalid}'
+assert bboxes == [{'x1': 0.1, 'y1': 0.2, 'x2': 0.3, 'y2': 0.4}], f'FAIL: {bboxes}'
 
-# Test 2: empty list
-result = _parse_bboxes('[]')
-assert result == [], f'FAIL: {result}'
+# Test 2: empty list — parse_ok=True, no bboxes, had_invalid=False (truly clean)
+bboxes, ok, invalid = _parse_bboxes('[]')
+assert ok is True and invalid is False and bboxes == [], f'FAIL: {ok}, {invalid}, {bboxes}'
 
-# Test 3: Gemini adds extra text
-result = _parse_bboxes('Here are the bounding boxes: [{\"x1\": 0.5, \"y1\": 0.5, \"x2\": 0.8, \"y2\": 0.9}]')
-assert len(result) == 1, f'FAIL: {result}'
+# Test 3: Gemini adds extra text — still parseable
+bboxes, ok, invalid = _parse_bboxes('Here are the bounding boxes: [{\"x1\": 0.5, \"y1\": 0.5, \"x2\": 0.8, \"y2\": 0.9}]')
+assert ok is True and len(bboxes) == 1, f'FAIL: {ok}, {bboxes}'
 
-# Test 4: invalid JSON
-result = _parse_bboxes('Sorry, no Chinese text found.')
-assert result == [], f'FAIL: {result}'
+# Test 4: invalid JSON — parse_ok=False
+bboxes, ok, invalid = _parse_bboxes('Sorry, no Chinese text found.')
+assert ok is False and bboxes == [], f'FAIL: {ok}, {bboxes}'
+
+# Test 5: inverted bbox — had_invalid=True, empty valid list
+bboxes, ok, invalid = _parse_bboxes('[{\"x1\": 0.8, \"y1\": 0.2, \"x2\": 0.3, \"y2\": 0.4}]')
+assert ok is True and invalid is True and bboxes == [], f'FAIL inverted: {ok}, {invalid}, {bboxes}'
+
+# Test 6: out-of-range bbox — had_invalid=True
+bboxes, ok, invalid = _parse_bboxes('[{\"x1\": -0.1, \"y1\": 0.2, \"x2\": 1.5, \"y2\": 0.4}]')
+assert ok is True and invalid is True and bboxes == [], f'FAIL range: {ok}, {invalid}, {bboxes}'
 
 print('All _parse_bboxes tests passed!')
 "
@@ -143,6 +172,9 @@ git commit -m "feat: add _parse_bboxes() and verify constants to grid_translator
 
 - [ ] **Bước 1: Thêm hàm `verify_and_patch()` vào cuối `grid_translator.py`, sau `translate_with_grid()`**
 
+> ⚠️ **[Fix ISSUE-1 R2]:** Dùng 3-tuple `(bboxes, parse_ok, had_invalid)`. Nếu `not bboxes and had_invalid` → log + continue (KHÔNG dừng sớm). Chỉ dừng sớm khi `ok=True, bboxes=[], had_invalid=False`.
+> ⚠️ **[Fix ISSUE-2 R1]:** Clamp `max_passes` ngay đầu hàm.
+
 ```python
 def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
     """Kiểm tra ảnh đã dịch còn sót chữ CJK không, patch các vùng bị bỏ sót.
@@ -151,11 +183,16 @@ def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
         image: PIL.Image - ảnh đã dịch xong
         client: genai.Client
         target_lang: str - ngôn ngữ đích để dịch lại
-        max_passes: int - số vòng kiểm tra tối đa (mặc định 3)
+        max_passes: int - số vòng kiểm tra tối đa (default VERIFY_MAX_PASSES=3)
 
     Returns:
         PIL.Image - ảnh đã patch (có thể là object cũ nếu không có gì cần fix)
     """
+    # Clamp để đảm bảo không vượt quá giới hạn đã định
+    max_passes = min(max(0, max_passes), VERIFY_MAX_PASSES)
+    if max_passes == 0:
+        return image
+
     patch_prompt = (
         f"Translate EVERY SINGLE piece of text from Chinese to {target_lang}. "
         "Do NOT skip any text. Preserve layout, colors, and visual style exactly."
@@ -164,7 +201,7 @@ def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
     img_area = img_w * img_h
 
     for pass_num in range(max_passes):
-        # Bước 1: Gửi ảnh đến Gemini để detect chữ CJK còn sót
+        # Gửi ảnh đến Gemini để detect chữ CJK còn sót
         try:
             verify_response = client.models.generate_content(
                 model=GEMINI_MODEL,
@@ -182,9 +219,20 @@ def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
             print(f"[verify_and_patch] Pass {pass_num + 1}: Lỗi gọi verify API: {e}")
             break
 
-        bboxes = _parse_bboxes(response_text)
+        bboxes, parse_ok, had_invalid = _parse_bboxes(response_text)
 
-        if not bboxes:
+        if not parse_ok:
+            # Gemini trả về non-JSON hoàn toàn: log warning, skip pass
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Cảnh báo — Gemini trả về non-JSON. Bỏ qua lượt này.")
+            continue
+
+        if not bboxes and had_invalid:
+            # Gemini detect text nhưng tọa độ không hợp lệ: log warning, tiếp tục
+            print(f"[verify_and_patch] Pass {pass_num + 1}: Cảnh báo — Gemini trả về bbox không hợp lệ. Bỏ qua lượt này.")
+            continue
+
+        if not bboxes and not had_invalid:
+            # Gemini xác nhận không còn CJK: dừng sớm
             print(f"[verify_and_patch] Pass {pass_num + 1}: Không còn chữ CJK. Dừng sớm.")
             break
 
@@ -194,13 +242,12 @@ def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
         patched_any = False
         for bbox in bboxes:
             try:
-                # Tính tọa độ pixel với margin 8%
                 x1 = bbox['x1']
                 y1 = bbox['y1']
                 x2 = bbox['x2']
                 y2 = bbox['y2']
 
-                # Mở rộng margin
+                # Mở rộng margin 8%
                 margin_x = (x2 - x1) * VERIFY_CROP_MARGIN
                 margin_y = (y2 - y1) * VERIFY_CROP_MARGIN
                 x1 = max(0.0, x1 - margin_x)
@@ -218,28 +265,26 @@ def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
                 crop_h = py2 - py1
                 crop_area = crop_w * crop_h
 
-                # Skip bbox quá nhỏ
+                # Skip if crop is too small
                 if crop_w < VERIFY_MIN_CROP_PX or crop_h < VERIFY_MIN_CROP_PX:
-                    print(f"[verify_and_patch] Skip bbox quá nhỏ: {crop_w}x{crop_h}px")
+                    print(f"[verify_and_patch] Skip small bbox: {crop_w}x{crop_h}px")
                     continue
 
-                # Skip bbox chiếm > 80% ảnh (tránh loop vô hạn)
+                # Skip if bbox covers > 80% of image (prevent infinite re-translate)
                 if crop_area > img_area * VERIFY_MAX_BBOX_AREA:
-                    print(f"[verify_and_patch] Skip bbox quá lớn: {crop_area}/{img_area} = {crop_area/img_area:.1%}")
+                    print(f"[verify_and_patch] Skip large bbox: {crop_area/img_area:.1%}")
                     continue
 
-                # Crop và upscale 2x để Gemini nhìn rõ hơn
+                # Crop and upscale 2x so Gemini can read small text
                 crop = image.crop((px1, py1, px2, py2))
                 upscaled_crop = crop.resize((crop_w * 2, crop_h * 2), Image.LANCZOS)
 
-                # Dịch lại vùng crop
+                # Re-translate the cropped region
                 translated_crop = _translate_single_tile(upscaled_crop, client, patch_prompt)
 
-                # Resize về kích thước gốc của crop
+                # Resize back to original crop size and paste over
                 translated_crop = translated_crop.resize((crop_w, crop_h), Image.LANCZOS)
                 translated_crop = translated_crop.convert(image.mode)
-
-                # Paste đè lên ảnh
                 image.paste(translated_crop, (px1, py1))
                 patched_any = True
 
@@ -297,10 +342,12 @@ from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, tran
 
 Thay thành:
 ```python
-from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid, verify_and_patch
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid, verify_and_patch, VERIFY_MAX_PASSES
 ```
 
 - [ ] **Bước 2: Đọc `verify_passes` từ form data**
+
+> ⚠️ **[Fix ISSUE-2]:** Clamp cả lower bound (0) lẫn upper bound (VERIFY_MAX_PASSES=3) để tránh tampered requests.
 
 Trong hàm `translate_image()`, sau dòng:
 ```python
@@ -315,8 +362,7 @@ Thêm ngay sau:
 ```python
     try:
         verify_passes = int(request.form.get('verify_passes', 0))
-        if verify_passes < 0:
-            verify_passes = 0
+        verify_passes = max(0, min(verify_passes, VERIFY_MAX_PASSES))
     except (ValueError, TypeError):
         verify_passes = 0
 ```
@@ -604,5 +650,8 @@ git commit -m "feat: multi-pass verify & patch complete — end-to-end tested"
 
 - [x] **Type consistency:**
   - `verify_and_patch(image, client, target_lang, max_passes)` — nhất quán giữa Task 2, 3, 4
-  - `_parse_bboxes(response_text)` → `list[dict]` — dùng đúng trong Task 2
+  - `_parse_bboxes(response_text)` → `tuple(list[dict], bool, bool)` — dùng đúng trong Task 2 với 3-tuple unpack
   - `VERIFY_PROMPT` — define Task 1, dùng Task 2 ✓
+  - `VERIFY_MAX_PASSES` — define Task 1, clamp trong Task 2 và Task 3 ✓
+
+- [x] **Codex plan review:** 2 rounds, 5 issues raised. ISSUE-1 (parse failure state), ISSUE-2 (upper bound clamp), ISSUE-4 (bbox validation) accepted and fixed. ISSUE-3 (Chinese-only scope) and ISSUE-5 (no automated tests) disputed and defended. Final VERDICT expected: APPROVE after Round 3.
