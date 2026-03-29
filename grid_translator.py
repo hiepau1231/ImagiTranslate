@@ -49,3 +49,19 @@ def _translate_single_tile(tile, client, prompt):
 
     result = result.resize(tile_size, Image.LANCZOS)
     return result
+
+
+def _split_tiles(image, grid_n):
+    """Chia anh thanh grid_n x grid_n tiles. Tile cuoi hap thu pixel du."""
+    img_w, img_h = image.size
+    tile_w = img_w // grid_n
+    tile_h = img_h // grid_n
+    tiles = []
+    for row in range(grid_n):
+        for col in range(grid_n):
+            left = col * tile_w
+            upper = row * tile_h
+            right = img_w if col == grid_n - 1 else left + tile_w
+            lower = img_h if row == grid_n - 1 else upper + tile_h
+            tiles.append((row, col, left, upper, right, lower, image.crop((left, upper, right, lower))))
+    return tiles
