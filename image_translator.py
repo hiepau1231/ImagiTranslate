@@ -5,10 +5,8 @@ import argparse
 from pathlib import Path
 from PIL import Image
 from google import genai
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS
 
-GEMINI_MODEL = 'gemini-3.1-flash-image-preview'
-MAX_RETRIES = 3
-RETRY_DELAY_SECONDS = 2
 VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 UPSCALE_FACTOR = 2
 UPSCALE_MAX_DIMENSION = 3000
