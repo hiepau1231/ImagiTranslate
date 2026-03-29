@@ -1,11 +1,11 @@
 import os
-import io
-import time
+import re
+import sys
 import argparse
 from pathlib import Path
 from PIL import Image
 from google import genai
-from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS
+from grid_translator import GEMINI_MODEL, MAX_RETRIES, RETRY_DELAY_SECONDS, translate_with_grid
 
 VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 UPSCALE_FACTOR = 2
