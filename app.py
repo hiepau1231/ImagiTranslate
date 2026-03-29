@@ -1,6 +1,7 @@
 import os
 import io
 import base64
+import traceback
 from flask import Flask, render_template, request, jsonify
 from PIL import Image
 from google import genai
@@ -110,6 +111,7 @@ def translate_image():
 
     except Exception as e:
         print(f"Lỗi khi xử lý: {e}")
+        traceback.print_exc()
         return jsonify({"error": f"Lỗi máy chủ: {str(e)}"}), 500
 
 if __name__ == '__main__':

@@ -10,3 +10,10 @@ output/
 docs/
 *.md
 !README.md
+.planning
+
+# Dev tooling artifacts
+.claude/
+.codex-review/
+.superpowers/
+test_images/
