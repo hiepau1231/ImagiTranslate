@@ -60,6 +60,12 @@
 **Requirements:** *(tất cả 10 v1 requirements đã implement — phase này validate, không thêm code mới)*
 **UI hint:** no
 
+### Plans
+
+| Plan | Description | Status |
+|------|-------------|--------|
+| 03-01 | Create `test_grid.py` end-to-end validation script | ✅ Done (2026-03-29) |
+
 ### Success Criteria
 
 1. Dịch cùng một ảnh game UI phức tạp với Off vs 2×2 vs 3×3: kết quả 2×2 và 3×3 dịch được nhiều text hơn hoặc bằng Off, không có ảnh nào bị lỗi khi Off không lỗi.

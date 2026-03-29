@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-last_updated: "2026-03-29T01:59:46.955Z"
+status: executing
+last_updated: "2026-03-29T03:00:00.000Z"
 progress:
   total_phases: 3
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 2
-  percent: 67
+  completed_phases: 2
+  total_plans: 5
+  completed_plans: 3
+  percent: 87
 ---
 
 # Project State
@@ -17,15 +17,15 @@ progress:
 ## Current Focus
 
 **Phase:** 3
-**Status:** Ready to plan
-**Progress:** 67% (Phase 1 + Phase 2 of 3 complete; all 4/4 plans done)
+**Status:** Executing Phase 03
+**Progress:** 87% (Phase 1 + Phase 2 complete; Phase 3 Plan 03-01 done — test_grid.py created, SC-5 + SC-4 pass offline)
 
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-03-29)
 
 **Core value:** Mọi chữ trong ảnh game UI phải được dịch — không bỏ sót
-**Current focus:** Phase 03 — End-to-End Validation
+**Current focus:** Phase 03 — end-to-end-validation
 
 ## Decisions
 
@@ -47,3 +47,4 @@ See: .planning/PROJECT.md (updated 2026-03-29)
 |-------|--------|------|---------|
 | Phase 01 — Grid Module Core | ✅ Complete | 2026-03-29 | Created grid_translator.py (5 tasks); migrated shared constants from app.py + image_translator.py (2 tasks) |
 | Phase 02 — Entry Point Integration | ✅ Complete | 2026-03-29 | Plan 02-01: CLI wired to translate_with_grid() with --grid NxN flag; Plan 02-02: web integration (app.py + index.html + script.js) |
+| Phase 03 — End-to-End Validation | 🔄 In progress | 2026-03-29 | Plan 03-01: test_grid.py created — SC-5 (mock call count) + SC-4 (RGBA safety) pass offline; SC-1/2/3 need live API + test_images/ |
