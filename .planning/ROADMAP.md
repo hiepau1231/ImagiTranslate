@@ -14,6 +14,13 @@
 **Requirements:** GRID-01, GRID-02, GRID-03, GRID-04, GRID-05, GRID-06, GRID-07
 **UI hint:** no
 
+### Plans
+
+| Plan | Description | Status |
+|------|-------------|--------|
+| 01-01 | Create `grid_translator.py` module | ✅ Done (2026-03-29) |
+| 01-02 | Constants migration (app.py + image_translator.py) | ⬜ Pending |
+
 ### Success Criteria
 
 1. `translate_with_grid(image, client, prompt, grid_n=1)` có thể import và gọi được từ Python shell mà không có lỗi; trả về PIL Image với `size == input.size`.
