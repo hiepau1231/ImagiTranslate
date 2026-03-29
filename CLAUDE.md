@@ -24,6 +24,10 @@ python image_translator.py -i ./input -o ./output -s "English" -t "Vietnamese"
 
 # Smoke test API (cần GEMINI_API_KEY env var)
 python test_api.py
+
+# Test OCR detector (offline, không cần API key)
+python test_ocr.py
+python test_ocr.py --integration
 ```
 
 Không có test framework, linter, formatter, hay CI/CD.
@@ -44,7 +48,10 @@ POST /translate (multipart form)      GEMINI_API_KEY env var
          PIL Image.open() + prompt string
          client.models.generate_content(
              model=GEMINI_MODEL,
-             contents=[pil_image, prompt]
+             contents=[prompt, pil_image],   # prompt TRƯỚC ảnh — bắt buộc
+             config=GenerateContentConfig(
+                 response_modalities=['IMAGE', 'TEXT']
+             )
          )
          [retry 3 lần, exponential backoff: 2s → 4s]
                        │
@@ -61,6 +68,41 @@ POST /translate (multipart form)      GEMINI_API_KEY env var
 **Frontend batch flow:** Files lưu trong `currentFiles[]` → sequential `fetch()` loop (không parallel — cố ý vì Flask dev server + rate limit) → side-by-side comparison UI.
 
 ## Key Patterns
+
+### Gemini Image Generation — Gotchas Đã Xác Nhận
+
+**⚠️ Thứ tự `contents` là bắt buộc: prompt TRƯỚC ảnh**
+```python
+# ✅ ĐÚNG — Gemini generate image
+contents=[prompt, pil_image]
+
+# ❌ SAI — Gemini trả về text mô tả (FinishReason.STOP, 1 text part)
+contents=[pil_image, prompt]
+```
+
+**⚠️ `response_modalities` phải là `['IMAGE', 'TEXT']` (không phải `['IMAGE']`)**
+```python
+# ✅ ĐÚNG
+response_modalities=['IMAGE', 'TEXT']
+
+# ❌ SAI — Gemini trả FinishReason.NO_IMAGE, content=None
+response_modalities=['IMAGE']
+```
+
+**⚠️ Prompt phải có explicit image output instruction**
+- Thêm vào cuối prompt: `"Output the result as an image."`
+- Không có câu này, Gemini dễ interpret task là "mô tả bản dịch" (text response)
+
+**⚠️ `content` có thể là `None`**
+- Khi `finish_reason=NO_IMAGE`, `candidate.content` là `None` (không có `.parts`)
+- Luôn guard: `cand.content.parts if cand.content else []`
+
+**Symptom table:**
+| `contents` order | `response_modalities` | Kết quả |
+|---|---|---|
+| `[image, prompt]` | `['IMAGE', 'TEXT']` | Text description (STOP) — Gemini mô tả bản dịch |
+| `[image, prompt]` | `['IMAGE']` | NO_IMAGE, content=None |
+| `[prompt, image]` | `['IMAGE', 'TEXT']` | ✅ Image trả về qua `inline_data` |
 
 ### Retry Logic (giống nhau ở cả 2 file)
 ```python
@@ -116,9 +158,35 @@ VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}  # chỉ image_translator.
 ## Codebase Notes
 
 - Model `gemini-3.1-flash-image-preview` (nickname: *Nano Banana 2*) là image generation model — **re-renders lại ảnh** với text đã dịch, không phải OCR + overlay
+- **Quan trọng:** Model này yêu cầu prompt đứng trước ảnh trong `contents` và `response_modalities=['IMAGE', 'TEXT']` để trả về ảnh (xem "Gemini Image Generation — Gotchas" ở trên)
 - Code ban đầu viết bằng tiếng Ý, đang được Việt hóa — một số comment cũ tiếng Ý còn sót trong `static/script.js` và `static/style.css`
 - `test_api.py` có `from google.genai import types` nhưng không dùng (unused import)
 - Batch processing cố ý sequential (không parallel) vì Flask dev server + API rate limits
+
+### PaddleOCR (verify_and_patch)
+
+`verify_and_patch()` trong `grid_translator.py` dùng **PaddleOCR** (local, offline) để detect chữ Chinese ideograph còn sót sau khi dịch — thay cho Gemini TEXT-only detection trước đây.
+
+- Module: `ocr_detector.py` — expose `detect_cjk_bboxes(pil_image) → list[dict]`
+- PaddleOCR lazy init lần đầu gọi (~200MB model, cache tại `~/.paddleocr/`)
+- Chỉ detect Chinese ideograph (U+4E00–U+9FFF, U+3400–U+4DBF, U+F900–U+FAFF) — không detect kana/hangul
+- Confidence threshold: `CJK_CONFIDENCE_THRESHOLD = 0.5`
+- **Giới hạn đã xác nhận:** PaddleOCR miss chữ nghệ thuật/embossed 3D trên nền phức tạp (game icon artwork). Với sprite atlas, đây là hành vi bình thường — chỉ clean UI text mới detect được.
+
+### Grid size recommendation
+
+`--grid NxN` ảnh hưởng trực tiếp đến chất lượng dịch:
+
+| Grid | Tile size (ảnh 1024×1024) | Phù hợp |
+|------|--------------------------|---------|
+| mặc định (1×1) | 1024×1024 | Ảnh đơn giản, ít text |
+| `2x2` | 512×512 | Ảnh thông thường |
+| `3x3` | 341×341 | Game UI screenshot |
+| `4x4` | 256×256 | **Sprite atlas, ảnh text dày đặc** — recommended |
+
+**Thực nghiệm trên `main_atlas.png` (1024×1024):**
+- `1×1`: còn 2 vùng Chinese sau verify, nhiều icon text bị miss do Gemini xử lý toàn ảnh
+- `4×4`: 0 vùng Chinese còn sót — Gemini dịch tốt hơn nhiều ở tile nhỏ 256×256px
 
 <!-- GSD:project-start source:PROJECT.md -->
 ## Project
@@ -402,7 +470,6 @@ ImagiTranslate là công cụ dịch thuật hình ảnh dùng Gemini AI để r
 - **flask** (≥3.0.0): Web framework [web only]
 - **werkzeug** (≥3.0.0): WSGI utilities [web only]
 ### No External Utility Dependencies
-- No OCR library (Gemini handles)
 - No image concatenation (static/script.js handles UI comparison)
 - No database (stateless)
 - No cache (fresh generation per request)
