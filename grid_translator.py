@@ -65,3 +65,22 @@ def _split_tiles(image, grid_n):
             lower = img_h if row == grid_n - 1 else upper + tile_h
             tiles.append((row, col, left, upper, right, lower, image.crop((left, upper, right, lower))))
     return tiles
+
+
+def _stitch_tiles(translated_tiles, image_size, grid_n):
+    """Rap tiles da dich vao canvas. Hard-paste, khong blending."""
+    canvas_mode = translated_tiles[0][4].mode
+    canvas = Image.new(canvas_mode, image_size)
+
+    for left, upper, right, lower, tile in translated_tiles:
+        slot_w = right - left
+        slot_h = lower - upper
+        tile = tile.convert(canvas_mode)
+        tile = tile.resize((slot_w, slot_h), Image.LANCZOS)
+        canvas.paste(tile, (left, upper))
+        del tile
+
+    assert canvas.size == image_size, (
+        f"Canvas size {canvas.size} != image size {image_size}"
+    )
+    return canvas
