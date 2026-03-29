@@ -64,60 +64,17 @@ def translate_images(input_dir: str, output_dir: str, source_lang: str, target_l
                     Image.LANCZOS
                 )
 
-            retry_delay = RETRY_DELAY_SECONDS
-            response = None
+            out_file_path = output_path / img_file.name
+            result_image = translate_with_grid(base_image, client, prompt, grid_n)
 
-            for attempt in range(MAX_RETRIES):
-                try:
-                    response = client.models.generate_content(
-                        model=GEMINI_MODEL,
-                        contents=[base_image, prompt]
-                    )
-                    # Chỉ break khi có ít nhất 1 part là ảnh (inline_data hoặc image)
-                    parts = response.candidates[0].content.parts if (
-                        response and response.candidates
-                    ) else []
-                    has_image = any(
-                        (hasattr(p, 'image') and p.image) or
-                        (hasattr(p, 'inline_data') and p.inline_data)
-                        for p in parts
-                    )
-                    if has_image:
-                        break
-                    else:
-                        raise Exception("Phản hồi không chứa ảnh (có thể là text response)")
-                except Exception as e:
-                    print(f"    [!] Lần thử {attempt + 1}/{MAX_RETRIES} thất bại cho {img_file.name}: {e}")
-                    if attempt < MAX_RETRIES - 1:
-                        print(f"    [*] Thử lại sau {retry_delay} giây...")
-                        time.sleep(retry_delay)
-                        retry_delay *= 2
-                    else:
-                        print(f"    [-] Thất bại sau {MAX_RETRIES} lần thử cho {img_file.name}.")
-                        response = None
+            # Normalize output về kích thước gốc — Gemini có thể trả về size khác
+            result_image = result_image.resize(orig_size, Image.LANCZOS)
 
-            if response and response.candidates and response.candidates[0].content.parts:
-                out_file_path = output_path / img_file.name
-                part = response.candidates[0].content.parts[0]
+            if img_file.suffix.lower() in {'.jpg', '.jpeg'} and result_image.mode in ('RGBA', 'P'):
+                result_image = result_image.convert('RGB')
 
-                if hasattr(part, 'image') and part.image:
-                    result_image = part.image
-                elif hasattr(part, 'inline_data') and part.inline_data:
-                    result_image = Image.open(io.BytesIO(part.inline_data.data))
-                else:
-                    print(f"    [-] Lỗi: Model không trả về ảnh hợp lệ cho {img_file.name}.")
-                    continue
-
-                # Normalize output về kích thước gốc — Gemini có thể trả về size khác
-                result_image = result_image.resize(orig_size, Image.LANCZOS)
-
-                if img_file.suffix.lower() in {'.jpg', '.jpeg'} and result_image.mode in ('RGBA', 'P'):
-                    result_image = result_image.convert('RGB')
-
-                result_image.save(out_file_path)
-                print(f"    [+] Đã lưu thành công: {out_file_path}")
-            else:
-                print(f"    [-] Lỗi: Không nhận được phản hồi hợp lệ cho {img_file.name}.")
+            result_image.save(out_file_path)
+            print(f"    [+] Đã lưu thành công: {out_file_path}")
 
         except Exception as e:
             print(f"    [!] Lỗi khi xử lý {img_file.name}: {e}")
