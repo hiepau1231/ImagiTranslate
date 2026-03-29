@@ -84,3 +84,19 @@ def _stitch_tiles(translated_tiles, image_size, grid_n):
         f"Canvas size {canvas.size} != image size {image_size}"
     )
     return canvas
+
+
+def translate_with_grid(image, client, prompt, grid_n=1):
+    """Dich anh qua Gemini voi grid splitting. grid_n=1 = khong chia."""
+    if grid_n == 1:
+        result = _translate_single_tile(image, client, prompt)
+        return result.resize(image.size, Image.LANCZOS)
+
+    tiles = _split_tiles(image, grid_n)
+
+    translated = []
+    for row, col, left, upper, right, lower, tile in tiles:
+        result = _translate_single_tile(tile, client, prompt)
+        translated.append((left, upper, right, lower, result))
+
+    return _stitch_tiles(translated, image.size, grid_n)
