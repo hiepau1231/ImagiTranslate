@@ -89,7 +89,21 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", default="./output", help="Thư mục lưu ảnh đã dịch. Mặc định: ./output")
     parser.add_argument("-s", "--source-lang", default="auto-detect", help="Ngôn ngữ nguồn (vd: 'English'). Mặc định: auto-detect")
     parser.add_argument("-t", "--target-lang", required=True, help="Ngôn ngữ đích (vd: 'Vietnamese'). Bắt buộc.")
+    parser.add_argument(
+        "--grid",
+        default=None,
+        help="Kích thước lưới chia ảnh, ví dụ: --grid 2x2, --grid 3x3. Mặc định: không chia (xử lý toàn bộ ảnh). Hợp lệ: 1x1-4x4."
+    )
 
     args = parser.parse_args()
 
-    translate_images(args.input, args.output, args.source_lang, args.target_lang)
+    # Parse và validate --grid
+    grid_n = 1
+    if args.grid is not None:
+        match = re.fullmatch(r'([1-4])x([1-4])', args.grid)
+        if not match or match.group(1) != match.group(2):
+            print("Lỗi: --grid phải có định dạng NxN (N từ 1-4), ví dụ: --grid 2x2")
+            sys.exit(1)
+        grid_n = int(match.group(1))
+
+    translate_images(args.input, args.output, args.source_lang, args.target_lang, grid_n)
