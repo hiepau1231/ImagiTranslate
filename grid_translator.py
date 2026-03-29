@@ -55,17 +55,27 @@ def _parse_bboxes(response_text):
             - had_invalid: True if >= 1 bbox was filtered due to invalid coordinates
     """
     text = response_text.strip()
-    # Try each [...] match from last to first — Gemini's actual answer is typically last
+    # Find all [...] groups, then pick the best candidate:
+    # prefer list-of-dicts (actual bboxes) over list-of-primitives (e.g. [0,1] notes)
     matches = list(re.finditer(r'\[.*?\]', text, re.DOTALL))
     if not matches:
         return [], False, False
     raw = None
-    for m in reversed(matches):
+    for m in matches:
         try:
             candidate = json.loads(m.group())
-            if isinstance(candidate, list):
+            if not isinstance(candidate, list):
+                continue
+            is_dict_list = bool(candidate) and all(isinstance(x, dict) for x in candidate)
+            # Prefer dict-list candidates; among equals prefer longer
+            if raw is None:
                 raw = candidate
-                break
+            elif is_dict_list and not (bool(raw) and all(isinstance(x, dict) for x in raw)):
+                raw = candidate
+            elif len(candidate) > len(raw) and (
+                not (bool(raw) and all(isinstance(x, dict) for x in raw)) or is_dict_list
+            ):
+                raw = candidate
         except json.JSONDecodeError:
             continue
     if raw is None:
@@ -80,10 +90,9 @@ def _parse_bboxes(response_text):
             try:
                 x1, y1 = float(b['x1']), float(b['y1'])
                 x2, y2 = float(b['x2']), float(b['y2'])
-            except (ValueError, TypeError):
+            except (ValueError, TypeError):  # handles non-numeric values including null/None
                 had_invalid = True
                 continue
-            # Validate finite values and normalized range with coordinate ordering
             if not all(math.isfinite(v) for v in (x1, y1, x2, y2)):
                 had_invalid = True
                 continue
