@@ -14,7 +14,6 @@ files_read:
   - .planning/phases/01-grid-module-core/01-CONTEXT.md
   - .planning/phases/01-grid-module-core/01-RESEARCH.md
   - .planning/REQUIREMENTS.md
-  - .planning/codebase/CONVENTIONS.md
 requirements_addressed:
   - GRID-05
 autonomous: true
@@ -35,8 +34,6 @@ Migrate shared constants (`GEMINI_MODEL`, `MAX_RETRIES`, `RETRY_DELAY_SECONDS`) 
 <read_first>
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/app.py (full file — especially lines 1-17 for imports and constants, and lines 83-111 for where constants are used)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/grid_translator.py (verify constants exist and values match)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-RESEARCH.md (Finding 5 for which constants move and which stay)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/codebase/CONVENTIONS.md (section 1.1 for import ordering: stdlib → third-party → local)
 </read_first>
 
 <action>
@@ -109,8 +106,6 @@ No other lines in `app.py` change. The constants are still used by name in lines
 <read_first>
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/image_translator.py (full file — especially lines 1-14 for imports and constants, and lines 69-99 for where constants are used)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/grid_translator.py (verify constants exist and values match)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-RESEARCH.md (Finding 5 for which constants move and which stay)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/codebase/CONVENTIONS.md (section 1.1 for import ordering)
 </read_first>
 
 <action>

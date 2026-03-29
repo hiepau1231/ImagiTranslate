@@ -11,9 +11,6 @@ files_read:
   - .planning/phases/01-grid-module-core/01-CONTEXT.md
   - .planning/phases/01-grid-module-core/01-RESEARCH.md
   - .planning/REQUIREMENTS.md
-  - .planning/codebase/CONVENTIONS.md
-  - .planning/research/PITFALLS.md
-  - .planning/research/STACK.md
 requirements_addressed:
   - GRID-01
   - GRID-02
@@ -39,8 +36,6 @@ Create `grid_translator.py` as a standalone Python module containing the full gr
 <read_first>
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/app.py (lines 1-17 for import style and constants)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/image_translator.py (lines 1-14 for import style and constants)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/codebase/CONVENTIONS.md (section 1.1 and 1.2 for file structure pattern)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-CONTEXT.md (D-03 for constants ownership)
 </read_first>
 
 <action>
@@ -81,10 +76,9 @@ Do NOT include `os`, `argparse`, `base64`, `flask`, or `google.genai` imports �
 ### Task 2: Implement `_translate_single_tile(tile, client, prompt)`
 
 <read_first>
+- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/grid_translator.py (current state from Task 1)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/app.py (lines 83-123 for the retry + dual-format parse + resize pattern)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/image_translator.py (lines 69-114 for the same pattern, CLI variant)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-RESEARCH.md (Finding 1 for extraction details)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-CONTEXT.md (D-05 for tile failure = raise Exception)
 </read_first>
 
 <action>
@@ -166,15 +160,14 @@ Key behavioral contracts:
 ### Task 3: Implement `_split_tiles(image, grid_n)`
 
 <read_first>
+- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/grid_translator.py (current state from Tasks 1-2)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-RESEARCH.md (Finding 2 for split logic and coordinate space)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/research/STACK.md (section 1.1 for Image.crop API and last-tile-absorbs-remainder pattern)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/research/PITFALLS.md (P10 for slot_w = right - left, not tile_w)
 </read_first>
 
 <action>
 Add function `_split_tiles` to `grid_translator.py` after `_translate_single_tile`. This function crops the image into grid_n x grid_n tiles where the last row/column absorbs remainder pixels.
 
-Returns a flat list of tuples: `(row, col, left, upper, right, lower, tile_image)` — storing crop coordinates alongside each tile so `_stitch_tiles` can compute exact slot dimensions from `(right - left, lower - upper)` instead of using generic `tile_w`/`tile_h` (prevents P10 coordinate mismatch).
+Returns a flat list of tuples: `(row, col, left, upper, right, lower, tile_image)` — storing crop coordinates alongside each tile so `_stitch_tiles` can compute exact slot dimensions from `(right - left, lower - upper)` instead of using generic `tile_w`/`tile_h` (prevents coordinate mismatch on remainder tiles).
 
 Exact function:
 
@@ -212,21 +205,21 @@ def _split_tiles(image, grid_n):
 ### Task 4: Implement `_stitch_tiles(translated_tiles, image_size, grid_n)`
 
 <read_first>
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-RESEARCH.md (Finding 2 for stitch logic, canvas mode, assert)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/research/STACK.md (section 1.2 for Image.paste API, slot_w/slot_h computation)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/research/PITFALLS.md (P10 for slot_w = right - left; P7 for tile.convert(canvas.mode); P8 for memory — del after paste)
+- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/grid_translator.py (current state from Tasks 1-3, especially `_split_tiles` return format)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-CONTEXT.md (D-06 for hard-paste, canvas mode from first tile, assert after stitch)
 </read_first>
 
 <action>
 Add function `_stitch_tiles` to `grid_translator.py` after `_split_tiles`. This function takes translated tiles (with their crop coordinates) and pastes them onto a canvas.
 
+The input `translated_tiles` is a list of `(left, upper, right, lower, tile_image)` tuples — built by `translate_with_grid` which transforms `_split_tiles` output after translating each tile. The tile image is at index `[4]` of each tuple.
+
 Key requirements:
-1. Canvas mode = mode of the first tile (CONTEXT D-06)
-2. Each tile resized to exact slot dims `(right - left, lower - upper)` before paste (P10 prevention)
-3. Mode guard: `tile.convert(canvas.mode)` before paste (P7 prevention)
+1. Canvas mode = mode of the first tile's image at index `[4]` (CONTEXT D-06)
+2. Each tile resized to exact slot dims `(right - left, lower - upper)` before paste (prevents coordinate mismatch)
+3. Mode guard: `tile.convert(canvas_mode)` before paste (handles RGB vs RGBA mismatch)
 4. Hard-paste only — no mask/blending (D-06)
-5. `del` tile after paste for memory (P8)
+5. `del` tile after paste for memory
 6. Assert canvas.size == image_size after stitch (D-06)
 
 Exact function:
@@ -234,7 +227,7 @@ Exact function:
 ```python
 def _stitch_tiles(translated_tiles, image_size, grid_n):
     """Rap tiles da dich vao canvas. Hard-paste, khong blending."""
-    canvas_mode = translated_tiles[0][1].mode
+    canvas_mode = translated_tiles[0][4].mode
     canvas = Image.new(canvas_mode, image_size)
 
     for left, upper, right, lower, tile in translated_tiles:
@@ -251,13 +244,13 @@ def _stitch_tiles(translated_tiles, image_size, grid_n):
     return canvas
 ```
 
-Note: `translated_tiles` is a list of `(left, upper, right, lower, tile_image)` tuples — the orchestrator (`translate_with_grid`) transforms the output of `_split_tiles` into this format after translating each tile.
+IMPORTANT: `canvas_mode = translated_tiles[0][4].mode` — the tile image is at index 4 of the tuple `(left, upper, right, lower, tile_image)`, NOT at index 1.
 </action>
 
 <acceptance_criteria>
 - `grid_translator.py` contains `def _stitch_tiles(translated_tiles, image_size, grid_n):`
 - Function creates canvas with `Image.new(canvas_mode, image_size)`
-- Function sets `canvas_mode = translated_tiles[0][1].mode`
+- Function sets `canvas_mode = translated_tiles[0][4].mode` (index 4, NOT index 1)
 - Function computes `slot_w = right - left` (not `tile_w`)
 - Function computes `slot_h = lower - upper` (not `tile_h`)
 - Function calls `tile.convert(canvas_mode)` before paste
@@ -273,8 +266,8 @@ Note: `translated_tiles` is a list of `(left, upper, right, lower, tile_image)` 
 ### Task 5: Implement `translate_with_grid(image, client, prompt, grid_n=1)` — the public API
 
 <read_first>
+- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/grid_translator.py (current state from Tasks 1-4 — verify `_split_tiles` returns 7-element tuples, `_stitch_tiles` expects 5-element tuples)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-CONTEXT.md (D-01 for upscaled space, D-04 for grid_n=1 fast path, D-05 for tile failure propagation)
-- d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/phases/01-grid-module-core/01-RESEARCH.md (Finding 3 for fast path, Finding 4 for tile failure)
 - d:/_Dev/GoodFirstIsuuses/ImagiTranslate/.planning/REQUIREMENTS.md (GRID-01, GRID-06, GRID-07)
 </read_first>
 
@@ -285,6 +278,8 @@ This function orchestrates the full pipeline:
 1. `grid_n == 1` fast path: call `_translate_single_tile` directly, resize to input image size, return (GRID-06)
 2. `grid_n > 1`: split → translate each tile → stitch (GRID-01)
 3. Any tile failure propagates up as Exception (GRID-07) — no try/except wrapping tile calls
+
+The function bridges the format gap between `_split_tiles` (returns 7-element tuples with row, col) and `_stitch_tiles` (expects 5-element tuples without row, col): it unpacks the 7-element tuples during iteration and builds 5-element tuples for stitch input.
 
 Exact function:
 
@@ -318,7 +313,9 @@ Key behavioral contracts:
 - Fast path calls `_translate_single_tile(image, client, prompt)` directly
 - Fast path returns `result.resize(image.size, Image.LANCZOS)`
 - For grid_n > 1: calls `_split_tiles(image, grid_n)`
-- For grid_n > 1: iterates over tiles calling `_translate_single_tile(tile, client, prompt)`
+- For grid_n > 1: iterates over tiles with `for row, col, left, upper, right, lower, tile in tiles:`
+- For grid_n > 1: calls `_translate_single_tile(tile, client, prompt)` for each tile
+- For grid_n > 1: builds tuples `(left, upper, right, lower, result)` for stitch input
 - For grid_n > 1: calls `_stitch_tiles(translated, image.size, grid_n)`
 - Function does NOT contain `try:` / `except` wrapping tile translation calls
 - `translate_with_grid` is the LAST function defined in the file
@@ -345,6 +342,9 @@ python -c "from grid_translator import _split_tiles, _translate_single_tile, _st
 
 # 5. No google.genai import in module
 python -c "import ast; tree = ast.parse(open('grid_translator.py').read()); imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]; names = []; [names.extend(a.name for a in n.names) if isinstance(n, ast.Import) else names.append(n.module) for n in imports]; assert 'google' not in str(names) and 'genai' not in str(names); print('No genai import OK')"
+
+# 6. Tuple index correctness — canvas_mode uses index [4]
+grep -n "translated_tiles\[0\]\[4\]\.mode" grid_translator.py && echo "Index OK" || echo "WRONG INDEX"
 ```
 
 ---
@@ -355,7 +355,7 @@ python -c "import ast; tree = ast.parse(open('grid_translator.py').read()); impo
 - [ ] `translate_with_grid(image, client, prompt, grid_n=1)` is a callable public function with `grid_n` defaulting to 1
 - [ ] `_split_tiles` returns tiles with crop coordinates; last tile absorbs remainder pixels
 - [ ] `_translate_single_tile` has retry loop (3 attempts, exponential backoff), dual-format image parse, resize to input tile size, and raises Exception on final failure
-- [ ] `_stitch_tiles` uses `slot_w = right - left` (not generic `tile_w`), converts tile mode, hard-pastes, asserts canvas size
+- [ ] `_stitch_tiles` uses `slot_w = right - left` (not generic `tile_w`), converts tile mode, hard-pastes, asserts canvas size; accesses tile image at tuple index `[4]`
 - [ ] `grid_n=1` fast path calls `_translate_single_tile` directly without split/stitch
 - [ ] Tile failure propagates as Exception — no try/except in `translate_with_grid`
 - [ ] Constants `GEMINI_MODEL`, `MAX_RETRIES`, `RETRY_DELAY_SECONDS` are defined with correct values
