@@ -11,7 +11,7 @@ VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
 UPSCALE_FACTOR = 2
 UPSCALE_MAX_DIMENSION = 3000
 
-def translate_images(input_dir: str, output_dir: str, source_lang: str, target_lang: str):
+def translate_images(input_dir: str, output_dir: str, source_lang: str, target_lang: str, grid_n: int = 1):
     """Dịch văn bản trong ảnh từ ngôn ngữ nguồn sang ngôn ngữ đích dùng Gemini."""
     if not os.environ.get("GEMINI_API_KEY"):
         print("Lỗi: Biến môi trường GEMINI_API_KEY chưa được thiết lập.")
