@@ -62,7 +62,7 @@ POST /translate (multipart form)      GEMINI_API_KEY env var
            ├─ part.image        → PIL Image trực tiếp
            └─ part.inline_data  → Image.open(BytesIO(data))
                        │
-         Web: save JPEG → base64 → JSON response
+         Web: save theo format gốc (PNG/WebP/JPEG) → base64 → JSON response
          CLI: save file giữ nguyên tên gốc
 ```
 
@@ -134,7 +134,7 @@ elif hasattr(part, 'inline_data') and part.inline_data:
 ```
 
 ### RGBA Conversion — Bất đối xứng
-- **`app.py`**: convert RGBA→RGB trên **input** (trước khi gửi Gemini), chỉ khi file là JPEG
+- **`app.py`**: convert RGBA→RGB trên **output** (trước khi save), chỉ khi xuất JPEG
 - **`image_translator.py`**: convert RGBA→RGB trên **output** (trước khi lưu), chỉ khi file là JPEG
 - PNG với alpha channel được gửi nguyên trạng — không convert
 
@@ -163,8 +163,16 @@ VALID_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}  # chỉ image_translator.
 - Model `gemini-3.1-flash-image-preview` (nickname: *Nano Banana 2*) là image generation model — **re-renders lại ảnh** với text đã dịch, không phải OCR + overlay
 - **Quan trọng:** Model này yêu cầu prompt đứng trước ảnh trong `contents` và `response_modalities=['IMAGE', 'TEXT']` để trả về ảnh (xem "Gemini Image Generation — Gotchas" ở trên)
 - Code ban đầu viết bằng tiếng Ý, đang được Việt hóa — một số comment cũ tiếng Ý còn sót trong `static/script.js` và `static/style.css`
-- `test_api.py` có `from google.genai import types` nhưng không dùng (unused import)
+- `test_api.py` có `from google.genai import types` nhưng không dùng (unused import); và thiếu `response_modalities` nên không thực sự verify image output
 - Batch processing cố ý sequential (không parallel) vì Flask dev server + API rate limits
+- `test_bugfixes.py` — 3 offline tests cho các bug đã fix: `_stitch_tiles` empty-list (RGB + RGBA), `_get_output_format()` mapping
+
+### Known Issues (chưa fix)
+
+| Issue | File | Mô tả |
+|-------|------|-------|
+| XSS trong `appendResultBox()` | `static/script.js:222` | `innerHTML` vẫn interpolate `fileObj.name` trên success path — cùng loại với bug đã fix ở `appendErrorBox` |
+| `_is_empty_tile()` crash L-mode | `grid_translator.py:29` | `np.any(arr > 30, axis=2)` crash với grayscale (L) image vì array 2-D, không có axis=2 |
 
 ### PaddleOCR (verify_and_patch)
 
