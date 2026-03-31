@@ -2,6 +2,7 @@ import os
 import io
 import base64
 import traceback
+from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 from PIL import Image
 from google import genai
@@ -15,6 +16,16 @@ UPSCALE_FACTOR = 2
 UPSCALE_MAX_DIMENSION = 3000
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
+
+def _get_output_format(ext):
+    """Map file extension to (PIL format string, MIME type). Defaults to JPEG."""
+    _FORMAT_MAP = {
+        '.png': ('PNG', 'image/png'),
+        '.webp': ('WEBP', 'image/webp'),
+        '.jpg': ('JPEG', 'image/jpeg'),
+        '.jpeg': ('JPEG', 'image/jpeg'),
+    }
+    return _FORMAT_MAP.get(ext.lower(), ('JPEG', 'image/jpeg'))
 
 def get_client(api_key):
     if not api_key:
@@ -62,6 +73,9 @@ def translate_image():
     if file.filename == '':
         return jsonify({"error": "Chưa chọn file."}), 400
 
+    orig_ext = Path(file.filename).suffix if file.filename else ''
+    pil_format, mime_type = _get_output_format(orig_ext)
+
     try:
         img_bytes = file.read()
         base_image = Image.open(io.BytesIO(img_bytes))
@@ -98,15 +112,19 @@ def translate_image():
         # Normalize output về kích thước gốc — Gemini có thể trả về size khác
         result_pil_img = result_pil_img.resize(orig_size, Image.LANCZOS)
 
+        # RGBA images cannot be saved as JPEG — convert to RGB if needed
+        if pil_format == 'JPEG' and result_pil_img.mode in ('RGBA', 'P'):
+            result_pil_img = result_pil_img.convert('RGB')
+
         img_byte_arr = io.BytesIO()
-        result_pil_img.save(img_byte_arr, format='JPEG')
+        result_pil_img.save(img_byte_arr, format=pil_format)
         img_byte_arr.seek(0)
 
         encoded_img = base64.b64encode(img_byte_arr.read()).decode('utf-8')
 
         return jsonify({
             "success": True,
-            "image": f"data:image/jpeg;base64,{encoded_img}"
+            "image": f"data:{mime_type};base64,{encoded_img}"
         })
 
     except Exception as e:

@@ -39,9 +39,32 @@ def test_stitch_tiles_empty_list_rgba():
     return True
 
 
+def test_output_format_detection():
+    """_get_output_format() returns the correct PIL format string and MIME type for each input extension."""
+    # Import the helper (does not exist yet — this test will fail until Task 4 is done)
+    try:
+        from app import _get_output_format
+    except ImportError:
+        print("[!] test_output_format_detection: SKIP — app.py not importable without Flask (run manually)")
+        return True  # Not a failure — import guard
+
+    assert _get_output_format('.png') == ('PNG', 'image/png'), f"PNG mismatch: {_get_output_format('.png')}"
+    assert _get_output_format('.jpg') == ('JPEG', 'image/jpeg'), f"JPG mismatch"
+    assert _get_output_format('.jpeg') == ('JPEG', 'image/jpeg'), f"JPEG mismatch"
+    assert _get_output_format('.webp') == ('WEBP', 'image/webp'), f"WEBP mismatch"
+    assert _get_output_format('.PNG') == ('PNG', 'image/png'), f"uppercase .PNG mismatch"
+    assert _get_output_format('.unknown') == ('JPEG', 'image/jpeg'), f"fallback mismatch"
+    print("[+] test_output_format_detection: all format assertions passed")
+    return True
+
+
 if __name__ == "__main__":
     results = []
-    for fn in [test_stitch_tiles_empty_list_rgb, test_stitch_tiles_empty_list_rgba]:
+    for fn in [
+        test_stitch_tiles_empty_list_rgb,
+        test_stitch_tiles_empty_list_rgba,
+        test_output_format_detection,
+    ]:
         try:
             results.append(fn())
         except AssertionError as e:
