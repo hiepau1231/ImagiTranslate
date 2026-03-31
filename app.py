@@ -17,14 +17,15 @@ UPSCALE_MAX_DIMENSION = 3000
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE_MB * 1024 * 1024
 
+_FORMAT_MAP = {
+    '.png':  ('PNG',  'image/png'),
+    '.webp': ('WEBP', 'image/webp'),
+    '.jpg':  ('JPEG', 'image/jpeg'),
+    '.jpeg': ('JPEG', 'image/jpeg'),
+}
+
 def _get_output_format(ext):
     """Map file extension to (PIL format string, MIME type). Defaults to JPEG."""
-    _FORMAT_MAP = {
-        '.png': ('PNG', 'image/png'),
-        '.webp': ('WEBP', 'image/webp'),
-        '.jpg': ('JPEG', 'image/jpeg'),
-        '.jpeg': ('JPEG', 'image/jpeg'),
-    }
     return _FORMAT_MAP.get(ext.lower(), ('JPEG', 'image/jpeg'))
 
 def get_client(api_key):
