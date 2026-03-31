@@ -104,7 +104,7 @@ def _split_tiles(image, grid_n):
 def _stitch_tiles(translated_tiles, image_size, grid_n, image_mode='RGB'):
     """Rap tiles da dich vao canvas. Hard-paste, khong blending."""
     if not translated_tiles:
-        bg = (255, 255, 255, 0) if image_mode == 'RGBA' else (255, 255, 255)
+        bg = (255, 255, 255, 0) if image_mode == 'RGBA' else (255, 255, 255) if image_mode == 'RGB' else 255
         return Image.new(image_mode, image_size, color=bg)
     canvas_mode = translated_tiles[0][4].mode
     bg_color = (255, 255, 255) if canvas_mode == 'RGB' else (255, 255, 255, 0)
