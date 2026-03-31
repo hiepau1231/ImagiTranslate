@@ -264,7 +264,10 @@ document.addEventListener('DOMContentLoaded', () => {
         container.style.border = "1px solid var(--danger)";
         container.style.borderRadius = "12px";
         container.style.color = "var(--danger)";
-        container.innerHTML = `<strong>Lỗi khi dịch file:</strong> ${filename}`;
+        const strong = document.createElement('strong');
+        strong.textContent = 'Lỗi khi dịch file: ';
+        container.appendChild(strong);
+        container.appendChild(document.createTextNode(filename));
         resultsGallery.appendChild(container);
     }
 
