@@ -101,8 +101,11 @@ def _split_tiles(image, grid_n):
     return tiles
 
 
-def _stitch_tiles(translated_tiles, image_size, grid_n):
+def _stitch_tiles(translated_tiles, image_size, grid_n, image_mode='RGB'):
     """Rap tiles da dich vao canvas. Hard-paste, khong blending."""
+    if not translated_tiles:
+        bg = (255, 255, 255, 0) if image_mode == 'RGBA' else (255, 255, 255)
+        return Image.new(image_mode, image_size, color=bg)
     canvas_mode = translated_tiles[0][4].mode
     bg_color = (255, 255, 255) if canvas_mode == 'RGB' else (255, 255, 255, 0)
     canvas = Image.new(canvas_mode, image_size, color=bg_color)
@@ -137,7 +140,7 @@ def translate_with_grid(image, client, prompt, grid_n=1):
         result = _translate_single_tile(tile, client, prompt)
         translated.append((left, upper, right, lower, result))
 
-    return _stitch_tiles(translated, image.size, grid_n)
+    return _stitch_tiles(translated, image.size, grid_n, image_mode=image.mode)
 
 
 def verify_and_patch(image, client, target_lang, max_passes=VERIFY_MAX_PASSES):
