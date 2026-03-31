@@ -41,7 +41,7 @@ def test_stitch_tiles_empty_list_rgba():
 
 def test_output_format_detection():
     """_get_output_format() returns the correct PIL format string and MIME type for each input extension."""
-    # Import the helper (does not exist yet — this test will fail until Task 4 is done)
+    # Import the helper — import guard protects environments without Flask installed
     try:
         from app import _get_output_format
     except ImportError:
